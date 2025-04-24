@@ -1,18 +1,17 @@
-import { useEffect, useState } from 'react'
-import { addDays, format } from 'date-fns'
-import {
-  Table, TableHead, TableBody, TableRow, TableCell,
-  Paper, Typography
-} from '@mui/material'
+import React, { useEffect, useState, useMemo } from 'react'
+import { Table, TableHead, TableBody, TableRow, TableCell, Paper, Typography } from '@mui/material'
 import sessionService from '../services/session.service'
+import { format, addDays, startOfWeek } from 'date-fns'
+import { useNavigate } from 'react-router-dom'
 
-export default function WeeklyRack(){
+const DOW = ['MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY','SUNDAY']
+
+export default function WeeklyRack() {
   const [rack, setRack] = useState({})
-  const monday = new Date()
-  // calcular lunes anterior
-  while (monday.getDay() !== 1) monday.setDate(monday.getDate()-1)
-  const from = format(monday,'yyyy-MM-dd')
-  const to   = format(addDays(monday,6),'yyyy-MM-dd')
+  const navigate = useNavigate()
+  const monday  = startOfWeek(new Date(), { weekStartsOn:1 })
+  const from    = format(monday,'yyyy-MM-dd')
+  const to      = format(addDays(monday,6),'yyyy-MM-dd')
 
   useEffect(()=>{
     sessionService.weekly(from,to)
@@ -20,38 +19,53 @@ export default function WeeklyRack(){
       .catch(console.error)
   },[from,to])
 
+  const slots = useMemo(() =>
+    Array.from(new Set(
+      Object.values(rack).flat().map(s=>`${s.startTime}-${s.endTime}`)
+    )).sort((a,b)=>a.localeCompare(b))
+  ,[rack])
+
+  const onClickCell = (dayIdx, start, end) => {
+    const date = format(addDays(monday,dayIdx),'yyyy-MM-dd')
+    navigate(`/reservations/new?d=${date}&s=${start}&e=${end}`)
+  }
+
   return (
     <Paper sx={{p:2}}>
-      <Typography variant="h5" gutterBottom>
-        Disponibilidad (semana de {from})
+      <Typography variant='h5' gutterBottom>
+        Disponibilidad (semana {from})
       </Typography>
-      <Table size="small">
+      <Table size='small'>
         <TableHead>
           <TableRow>
             <TableCell>Hora</TableCell>
-            {Array.from({length:7}).map((_,i)=>
-              <TableCell key={i}>
-                {format(addDays(monday,i),'EEE dd')}
-              </TableCell>
-            )}
+            {DOW.map(d=><TableCell key={d}>{d.slice(0,3)}</TableCell>)}
           </TableRow>
         </TableHead>
         <TableBody>
-          {/** Agrupamos por hora de inicio */}
-          {Object.values(rack).flat()
-            .sort((a,b)=> a.startTime.localeCompare(b.startTime))
-            .map(s=>(
-            <TableRow key={s.id}>
-              <TableCell>{s.startTime}-{s.endTime}</TableCell>
-              {Array.from({length:7}).map((_,i)=>{
-                const day = format(addDays(monday,i),'yyyy-MM-dd')
-                const has = rack[day]?.some(x=>x.id===s.id)
-                return <TableCell key={i}>
-                  {has? 'Disponible': ''}
-                </TableCell>
-              })}
-            </TableRow>
-          ))}
+          {slots.map(range=>{
+            const [start,end] = range.split('-')
+            return (
+              <TableRow key={range}>
+                <TableCell>{range}</TableCell>
+                {DOW.map((d,idx)=>{
+                  const avail = rack[d]?.some(s=>s.startTime===start)
+                  return (
+                    <TableCell
+                      key={d}
+                      onClick={()=> avail && onClickCell(idx,start,end)}
+                      sx={{
+                        cursor: avail?'pointer':'default',
+                        color: avail?'green':'inherit'
+                      }}
+                    >
+                      {avail?'Disponible':''}
+                    </TableCell>
+                  )
+                })}
+              </TableRow>
+            )
+          })}
         </TableBody>
       </Table>
     </Paper>
